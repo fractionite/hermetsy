@@ -1,0 +1,156 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id          String   @id @default(uuid())
+  etsyShopId  BigInt?  @unique
+  etsyUserId  BigInt?
+  shopName    String?
+  accessLevel String   @default("personal")
+
+  tokens      OAuthToken?
+  listings    ListingCache[]
+  snapshots   ListingSnapshot[]
+  operations  BulkOperation[]
+  auditEvents AuditEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OAuthToken {
+  id                    String   @id @default(uuid())
+  shopId                String   @unique
+  shop                  Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String
+  scope                 String
+  expiresAt             DateTime?
+  refreshExpiresAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ListingCache {
+  id                    String   @id @default(uuid())
+  shopId                String
+  shop                  Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  etsyListingId         BigInt
+  state                 String?
+  title                 String?
+  description           String?
+  tags                  Json?
+  lastModifiedTimestamp BigInt?
+  rawPayload            Json?
+  fetchedAt             DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shopId, etsyListingId])
+  @@index([shopId])
+  @@index([etsyListingId])
+}
+
+model ListingSnapshot {
+  id                    String   @id @default(uuid())
+  shopId                String
+  shop                  Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  operationId           String?
+  etsyListingId         BigInt
+  snapshotType          String
+
+  title                 String?
+  description           String?
+  tags                  Json?
+  state                 String?
+  lastModifiedTimestamp BigInt?
+  rawPayload            Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([operationId])
+  @@index([etsyListingId])
+}
+
+model BulkOperation {
+  id          String          @id @default(uuid())
+  shopId      String
+  shop        Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  type        String
+  status      String          @default("draft")
+  settings    Json?
+
+  totalItems  Int             @default(0)
+  approvedAt  DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  items       OperationItem[]
+  auditEvents AuditEvent[]
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([shopId])
+  @@index([status])
+}
+
+model OperationItem {
+  id              String        @id @default(uuid())
+  operationId     String
+  operation       BulkOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  etsyListingId   BigInt
+  status          String        @default("pending")
+
+  oldTitle        String?
+  newTitle        String?
+  oldDescription  String?
+  newDescription  String?
+
+  validationErrors Json?
+  etsyResponse     Json?
+  errorMessage     String?
+  attemptCount     Int          @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([operationId])
+  @@index([etsyListingId])
+  @@index([status])
+}
+
+model AuditEvent {
+  id            String   @id @default(uuid())
+  shopId        String
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  operationId   String?
+  operation     BulkOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
+
+  etsyListingId BigInt?
+  eventType     String
+  message       String?
+  metadata      Json?
+
+  createdAt     DateTime @default(now())
+
+  @@index([shopId])
+  @@index([operationId])
+  @@index([etsyListingId])
+}

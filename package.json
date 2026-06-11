@@ -1,0 +1,23 @@
+{
+  "name": "etsy-listing-assistant",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "apps/worker",
+    "packages/database",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "docker compose up --build",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f",
+    "db:migrate": "docker compose exec api npm run db:migrate --workspace @etsybot/database",
+    "db:seed": "docker compose exec api npm run db:seed --workspace @etsybot/database",
+    "db:studio": "docker compose exec api npm run db:studio --workspace @etsybot/database",
+    "db:reset": "docker compose exec api npm run db:reset --workspace @etsybot/database"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}
