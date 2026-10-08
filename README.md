@@ -1,6 +1,8 @@
 # Hermetsy
 
-![Hermetsy diagram](docs/hermetsy-diagram.png)
+![Hermetsy evaluated listing proposal workflow](docs/hermetsy-evaluation-workflow.png)
+
+[Edit the workflow in Excalidraw](docs/hermetsy-evaluation-workflow.excalidraw) · [SVG](docs/hermetsy-evaluation-workflow.svg)
 
 An Etsy listing assistant built around a small shop's day-to-day admin: sync listings,
 prepare changes, inspect a before/after preview, and evaluate agent suggestions before approval.
