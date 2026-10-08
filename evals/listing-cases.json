@@ -1,0 +1,38 @@
+[
+  {
+    "id": "relevant-rewrite",
+    "source": { "title": "Blue ceramic mug", "description": "A blue ceramic mug, 300 ml.", "tags": ["ceramic mug"] },
+    "candidate": { "title": "Blue ceramic mug – 300 ml", "description": "A 300 ml ceramic mug in blue.", "tags": ["blue mug", "ceramic mug"] },
+    "expectedRules": "needs_review", "expectedJev": "ready_for_review"
+  },
+  {
+    "id": "unrelated-keywords",
+    "source": { "title": "Blue ceramic mug", "description": "A blue ceramic mug, 300 ml.", "tags": ["ceramic mug"] },
+    "candidate": { "title": "Blue ceramic mug", "description": "A blue ceramic mug, 300 ml.", "tags": ["gold necklace", "running shoes"] },
+    "expectedRules": "needs_review", "expectedJev": "needs_review"
+  },
+  {
+    "id": "invented-material",
+    "source": { "title": "Blue ceramic mug", "description": "A blue ceramic mug, 300 ml.", "tags": ["ceramic mug"] },
+    "candidate": { "title": "Blue solid silver mug", "description": "Made from solid silver. Guaranteed next-day delivery.", "tags": ["silver mug"] },
+    "expectedRules": "needs_review", "expectedJev": "needs_review"
+  },
+  {
+    "id": "keyword-stuffing",
+    "source": { "title": "Blue ceramic mug", "description": "A blue ceramic mug, 300 ml.", "tags": ["ceramic mug"] },
+    "candidate": { "title": "Mug mug mug blue mug ceramic mug mug gift mug mug", "description": "Mug mug ceramic mug mug blue mug gift mug mug mug.", "tags": ["mug"] },
+    "expectedRules": "needs_review", "expectedJev": "needs_review"
+  },
+  {
+    "id": "duplicate-tags",
+    "source": { "title": "Blue ceramic mug", "description": "A blue ceramic mug, 300 ml.", "tags": ["ceramic mug"] },
+    "candidate": { "title": "Blue ceramic mug", "description": "A blue ceramic mug, 300 ml.", "tags": ["Blue mug", "blue mug"] },
+    "expectedRules": "blocked", "expectedJev": "blocked"
+  },
+  {
+    "id": "unresolved-template",
+    "source": { "title": "Blue ceramic mug", "description": "A blue ceramic mug, 300 ml.", "tags": ["ceramic mug"] },
+    "candidate": { "title": "Blue ceramic mug", "description": "Made from {{material}}.", "tags": ["blue mug"] },
+    "expectedRules": "blocked", "expectedJev": "blocked"
+  }
+]

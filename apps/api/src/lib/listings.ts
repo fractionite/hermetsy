@@ -19,7 +19,6 @@ export function normalizeTags(input: unknown) {
     return input
       .map((tag) => String(tag).trim())
       .filter((tag) => tag.length > 0)
-      .slice(0, 13)
   }
 
   if (typeof input === 'string') {
@@ -27,7 +26,6 @@ export function normalizeTags(input: unknown) {
       .split(',')
       .map((tag) => tag.trim())
       .filter((tag) => tag.length > 0)
-      .slice(0, 13)
   }
 
   return []
@@ -63,4 +61,3 @@ export async function resolveConnectedShop() {
     include: { tokens: true }
   })
 }
-

@@ -1,10 +1,68 @@
-# Etsy Listing Assistant
+# Hermetsy
 
 ![Hermetsy diagram](docs/hermetsy-diagram.png)
 
-Local Dockerized monorepo for listing sync, dry-run transformations, queued writes, and rollback support.
+An Etsy listing assistant built around a small shop's day-to-day admin: sync listings,
+prepare changes, inspect a before/after preview, and evaluate agent suggestions before approval.
 
-This copy is sanitized for public sharing. It ships with mock data and placeholder environment values only.
+This is a local proof of concept, shared under the MIT licence. The default configuration
+uses synthetic shop data, rules-based evaluations, and disabled writes. No Etsy or Jev
+credentials are needed to explore listing previews or run the offline evaluation dataset.
+
+## What you can try
+
+- Browse and edit mock listings, or preview bulk title and description changes.
+- Submit agent proposals with title, description and tag changes.
+- Evaluate proposals using deterministic checks and an optional Jev integration.
+- Inspect stored verdicts, source evidence, proposed tags and field changes before approval.
+- Explore snapshots, audit events and the rollback implementation.
+
+The evaluation layer checks suggestion quality against the source listing. It does not
+research search volume, measure keyword competition, or predict traffic or sales.
+The Jev adapter is tested using mocked responses; no live-model accuracy benchmark is claimed.
+The starter dataset contains six synthetic examples, not a representative Etsy benchmark.
+
+This app is intended for local development. General web routes currently have no user
+authentication, stored OAuth token fields do not implement encryption at rest, and a
+write-scoped agent can acknowledge and approve proposals. Do not expose it as a hosted
+service or rely on it for unattended shop updates. Verify rollback end to end before live use.
+
+## Listing suggestion evaluations
+
+Agent proposals now run deterministic checks (listing constraints, unresolved placeholders,
+duplicate tags) before being persisted. Set `LISTING_EVAL_PROVIDER=jev` and
+`TYPESAFE_API_KEY` in `.env` to additionally evaluate product relevance, supported claims,
+and keyword stuffing through [TypeSafe's official API](https://docs.typesafe.ai/api).
+`JEV_MODEL` defaults to `jev-1.13.0`; the returned model version is saved with each verdict.
+Rules mode is the default and needs no model credentials.
+
+Source listing evidence is retained in operation settings. Evaluations are stored in
+operation settings and proposal audit metadata, with rubric
+version, thresholds, timestamp, probabilities and elapsed time. The operation preview
+shows the verdict and proposed tags. Both approval endpoints require
+`{"evaluationAcknowledged":true}` for agent proposals; deterministic failures cannot
+be approved. Legacy agent proposals must be recreated. Jev outages or missing credentials
+produce an explicit manual-review result rather than a passing semantic verdict.
+
+These checks apply to agent listing proposals, not the separate direct listing editor or
+find/replace workflow. An acknowledgement is not proof of human identity: the existing
+write-scoped agent endpoint can still approve. This change does not implement a human-only
+authorization boundary. No evaluator writes to Etsy or predicts keyword demand/sales.
+
+Run the isolated regression checks and starter dataset (after `npm install`):
+
+```bash
+npm run test:evals
+npm run evals
+# Optional paid evaluation of the six synthetic cases:
+npm run evals -- --jev
+```
+
+The dataset includes relevant rewrites, unrelated keywords, invented claims, stuffing,
+duplicate tags and unresolved templates. The thresholds are starting assumptions, not
+calibrated guarantees. Add seller-labelled examples and a separate held-out test set before
+claiming model accuracy. Track false-ready suggestions, label agreement, manual-review
+rate, API failures, cost and latency. Measuring traffic or sales requires actual shop data.
 
 ## Prerequisites
 
@@ -50,6 +108,8 @@ If you restart ngrok and it gives you a new forwarding URL, update both Etsy and
 ## Quick start
 
 ```bash
+git clone https://github.com/fractionite/hermetsy.git
+cd hermetsy
 cp .env.example .env
 docker compose up --build
 ```
@@ -58,12 +118,35 @@ In another terminal:
 
 ```bash
 docker compose exec api npm run db:migrate --workspace @etsybot/database
+docker compose exec api npm run db:seed --workspace @etsybot/database
 ```
 
 Open:
 
 - Web: http://localhost:3000
 - API: http://localhost:4000/health
+
+Keep `MOCK_ETSY=true` and `ETSY_WRITE_DISABLED=true` for the preview demo. The API also
+runs migrations automatically at startup. The manual migration command is useful if
+you need to rerun them. Change `WEB_PORT` and `API_PORT` in `.env` if these ports are busy;
+update `WEB_BASE_URL` to match the web port.
+
+### Try an evaluated proposal
+
+After seeding, the mock mug has listing ID `1001`. Replace the placeholder read token
+in `.env` with a local token of your choice, then restart the API. Use that token below:
+
+```bash
+curl http://localhost:4000/v1/listings/1001/proposals \
+  -H 'Authorization: Bearer YOUR_LOCAL_READ_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Sample Ceramic Mug, Handmade Gift","tags":["ceramic mug","handmade gift"]}'
+```
+
+The response includes the evaluation and an operation ID. Open
+`http://localhost:3000/operations/OPERATION_ID` to inspect the suggestion review.
+Rules mode leaves semantic judgments for manual review. Approval requires an explicit
+acknowledgement and queues work; writes remain disabled in the default demo configuration.
 
 ## Persistence note
 
@@ -79,7 +162,8 @@ After migrations, run:
 make seed
 ```
 
-This seeds a mock Etsy shop plus two sample listings so you can test sync, preview, and rollback immediately.
+This seeds a mock Etsy shop plus two sample listings so you can explore listing previews.
+Rollback requires a prior successfully applied operation and end-to-end verification.
 
 ## Etsy redirect URI
 
@@ -118,9 +202,11 @@ Basic flow:
 
 Hermes also supports skills, so you can keep an Etsy-specific skill alongside this repo and call it from the agent when you want listing guidance or a review pass.
 
-## Installing The Etsy Listing Growth Skill
+## Optional Etsy Listing Growth Skill
 
-Add the skill as a markdown file in Hermes' user skills directory inside the container:
+The growth skill mentioned here is not bundled in this repository. If you have authored
+an Etsy listing growth skill, add its markdown file in Hermes' user skills directory
+inside the container:
 
 ```bash
 ~/.hermes/skills/openclaw-imports/etsy-listing-growth.md
@@ -128,11 +214,6 @@ Add the skill as a markdown file in Hermes' user skills directory inside the con
 
 Then restart Hermes or reload skills, and confirm it is available with the Hermes skills command. From there you can invoke it by name from a Hermes conversation when you want listing analysis, keyword targeting, or conversion checks.
 
-## Local ports
+## Licence
 
-Depending on your Docker Desktop port mapping, the host ports may be remapped. In the current validated setup:
-
-- Web: http://localhost:3001
-- API: http://localhost:4001
-- Postgres: localhost:5432
-- Redis: localhost:6379
+[MIT](LICENSE). You are welcome to try it, adapt it and share feedback.

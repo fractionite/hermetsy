@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { prisma } from '@etsybot/database'
 import {
   createEtsyClient,
+  evaluateListing,
+  proposalApprovalError,
   getEtsyTokenStatus,
   validateListingUpdate
 } from '@etsybot/shared'
@@ -114,6 +116,7 @@ function serializeListingEdit(operation: {
       tags: Array.isArray(proposed.tags) ? proposed.tags : []
     },
     diff,
+    evaluation: settings.evaluation || null,
     item: item
       ? {
           id: item.id,
@@ -281,6 +284,15 @@ export async function agentRoutes(app: FastifyInstance) {
       nextTags
     })
 
+    const evaluation = await evaluateListing({
+      source: { title: currentTitle, description: currentDescription, tags: currentTags },
+      candidate: { title: nextTitle, description: nextDescription, tags: nextTags }
+    }, {
+      provider: process.env.LISTING_EVAL_PROVIDER,
+      apiKey: process.env.TYPESAFE_API_KEY,
+      model: process.env.JEV_MODEL
+    })
+
     const operation = await prisma.$transaction(async (tx) => {
       const created = await tx.bulkOperation.create({
         data: {
@@ -291,12 +303,14 @@ export async function agentRoutes(app: FastifyInstance) {
           settings: {
             origin: 'demo',
             listingId: listing.etsyListingId.toString(),
+            source: { title: currentTitle, description: currentDescription, tags: currentTags },
             proposed: {
               title: nextTitle,
               description: nextDescription,
               tags: nextTags
             },
-            diff
+            diff,
+            evaluation
           }
         }
       })
@@ -305,12 +319,12 @@ export async function agentRoutes(app: FastifyInstance) {
         data: {
           operationId: created.id,
           etsyListingId: listing.etsyListingId,
-          status: 'pending_approval',
+          status: evaluation.decision === 'blocked' ? 'invalid' : 'pending_approval',
           oldTitle: listing.title,
           newTitle: nextTitle,
           oldDescription: listing.description,
           newDescription: nextDescription,
-          validationErrors: validation.errors
+          validationErrors: evaluation.checks.errors
         }
       })
 
@@ -323,7 +337,8 @@ export async function agentRoutes(app: FastifyInstance) {
           message: 'Agent proposal created',
           metadata: {
             origin: 'demo',
-            diff
+            diff,
+            evaluation
           }
         }
       })
@@ -402,6 +417,10 @@ export async function agentRoutes(app: FastifyInstance) {
       })
     }
 
+    const approvalBody = request.body as { evaluationAcknowledged?: unknown } | undefined
+    const evaluationError = proposalApprovalError(operation.settings, approvalBody?.evaluationAcknowledged === true)
+    if (evaluationError) return reply.code(409).send({ error: evaluationError })
+
     const updated = await prisma.bulkOperation.update({
       where: {
         id: operation.id
@@ -421,7 +440,8 @@ export async function agentRoutes(app: FastifyInstance) {
         operationId: updated.id,
         etsyListingId: updated.items[0]?.etsyListingId,
         eventType: 'agent_listing_edit_approved',
-        message: 'Agent proposal approved'
+        message: 'Agent proposal approved after evaluation acknowledgement',
+        metadata: { evaluationAcknowledged: true }
       }
     })
 

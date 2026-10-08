@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import type { Evaluation } from '@etsybot/shared'
 
 type Item = {
   id: string
@@ -20,6 +21,7 @@ type Operation = {
   status: string
   totalItems: number
   items: Item[]
+  settings: { evaluation?: Evaluation; proposed?: { tags?: string[] } } | null
 }
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000'
@@ -31,6 +33,7 @@ export default function OperationPage({
 }) {
   const [operation, setOperation] = useState<Operation | null>(null)
   const [message, setMessage] = useState('Loading...')
+  const [evaluationAcknowledged, setEvaluationAcknowledged] = useState(false)
 
   async function loadOperation() {
     const response = await fetch(`${apiBase}/api/operations/${params.operationId}`)
@@ -45,11 +48,18 @@ export default function OperationPage({
 
   async function approve() {
     setMessage('Queued for worker processing...')
-    await fetch(`${apiBase}/api/operations/${params.operationId}/approve`, {
-      method: 'POST'
+    const response = await fetch(`${apiBase}/api/operations/${params.operationId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ evaluationAcknowledged })
     })
-    setMessage('Operation approved.')
+    if (!response.ok) {
+      const error = await response.json()
+      setMessage(error.error || 'Approval failed.')
+      return
+    }
     await loadOperation()
+    setMessage('Operation approved and queued.')
   }
 
   if (!operation) {
@@ -72,7 +82,10 @@ export default function OperationPage({
           Status: {operation.status}. Total items: {operation.totalItems}.
         </p>
         <div className="row">
-          <button className="button" onClick={approve}>
+          <button className="button" onClick={approve} disabled={
+            !['draft', 'previewed'].includes(operation.status) ||
+            (operation.type === 'agent_listing_edit' && (!evaluationAcknowledged || !operation.settings?.evaluation || operation.settings.evaluation.decision === 'blocked'))
+          }>
             Approve and Queue
           </button>
           <Link className="button secondary" href="/listings">
@@ -81,6 +94,24 @@ export default function OperationPage({
         </div>
         <p className="muted">{message}</p>
       </section>
+
+      {operation.type === 'agent_listing_edit' && (
+        <section className="card">
+          <h2>Suggestion review</h2>
+          {operation.settings?.evaluation ? <>
+            <p>{operation.settings.evaluation.decision.replaceAll('_', ' ')}</p>
+            <ul>{operation.settings.evaluation.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+            {operation.settings.evaluation.probabilities && <ul>
+              <li>Probability keywords match the product: {Math.round(operation.settings.evaluation.probabilities.relevant * 100)}%</li>
+              <li>Probability claims are supported: {Math.round(operation.settings.evaluation.probabilities.supported * 100)}%</li>
+              <li>Probability of keyword stuffing: {Math.round(operation.settings.evaluation.probabilities.stuffing * 100)}%</li>
+            </ul>}
+            <p className="muted">These are model estimates. They do not measure search demand or predict sales.</p>
+            <label><input type="checkbox" checked={evaluationAcknowledged} onChange={event => setEvaluationAcknowledged(event.target.checked)} /> I have checked the suggestion and its evaluation.</label>
+          </> : <p>Create a new proposal to evaluate this suggestion before approval.</p>}
+          <p>Proposed tags: {operation.settings?.proposed?.tags?.join(', ') || 'None'}</p>
+        </section>
+      )}
 
       <section className="card">
         <h2>Diff preview</h2>

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@etsybot/database'
-import { applyFindReplace, validateListingUpdate } from '@etsybot/shared'
+import { applyFindReplace, validateListingUpdate, proposalApprovalError } from '@etsybot/shared'
 import { updateQueue } from '../queues/update.queue.js'
 
 type FindReplaceRule = {
@@ -129,8 +129,19 @@ export async function operationRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/:operationId/approve', async (request) => {
+  app.post('/:operationId/approve', async (request, reply) => {
     const params = request.params as { operationId: string }
+
+    const existing = await prisma.bulkOperation.findUnique({ where: { id: params.operationId } })
+    if (!existing) return reply.code(404).send({ error: 'Operation not found' })
+    if (!['draft', 'previewed'].includes(existing.status)) {
+      return reply.code(409).send({ error: `Operation is already ${existing.status}` })
+    }
+    if (existing.type === 'agent_listing_edit') {
+      const body = request.body as { evaluationAcknowledged?: unknown } | undefined
+      const error = proposalApprovalError(existing.settings, body?.evaluationAcknowledged === true)
+      if (error) return reply.code(409).send({ error })
+    }
 
     const operation = await prisma.bulkOperation.update({
       where: {
@@ -152,6 +163,15 @@ export async function operationRoutes(app: FastifyInstance) {
     await updateQueue.add('apply-operation', {
       operationId: operation.id
     })
+
+    if (existing.type === 'agent_listing_edit') {
+      await prisma.auditEvent.create({ data: {
+        shopId: existing.shopId, operationId: existing.id,
+        eventType: 'listing_edit_approved',
+        message: 'Proposal approved after evaluation acknowledgement',
+        metadata: { evaluationAcknowledged: true }
+      } })
+    }
 
     return {
       ok: true,
